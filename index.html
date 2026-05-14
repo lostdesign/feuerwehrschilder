@@ -129,10 +129,42 @@
             place-items: center;
         }
 
+        .preview-card {
+            width: 100%;
+            height: 100%;
+            min-width: 0;
+            min-height: 0;
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr) auto;
+            place-items: center;
+            gap: 14px;
+        }
+
+        .preview-header {
+            width: min(100%, 1000px);
+            min-width: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: #374151;
+        }
+
+        .preview-header strong {
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #111827;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+            white-space: nowrap;
+        }
+
         .sign-preview {
             line-height: 0;
             max-width: 100%;
-            max-height: calc(100vh - 48px);
+            max-height: calc(100vh - 120px);
             filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.16));
         }
 
@@ -140,6 +172,15 @@
             width: 100%;
             height: 100%;
             display: block;
+        }
+
+        .preview-note {
+            margin: 0;
+            max-width: 1000px;
+            font-size: 13px;
+            line-height: 1.35;
+            color: #6b7280;
+            text-align: center;
         }
 
         @media (max-width: 760px) {
@@ -168,12 +209,13 @@
                 padding: 8px 10px;
             }
 
-            .note {
+            .note,
+            .preview-note {
                 display: none;
             }
 
             .sign-preview {
-                max-height: calc(100vh - 360px);
+                max-height: calc(100vh - 380px);
             }
         }
     </style>
@@ -234,7 +276,22 @@
             </section>
 
             <section class="preview">
-                <div class="sign-preview" :style="signPreviewStyle" v-html="svgMarkup"></div>
+                <div class="preview-card">
+                    <div class="preview-header">
+                        <span>Vorschau</span>
+                        <strong>
+                            {{ selectedSignSizeLabel }} · Schrift {{ formattedMainFontSize }}
+                            mm
+                        </strong>
+                    </div>
+
+                    <div class="sign-preview" :style="signPreviewStyle" v-html="svgMarkup"></div>
+
+                    <p class="preview-note">
+                        Die Vorschau ist proportional skaliert. Die exportierte Datei nutzt
+                        das ausgewählte Maß.
+                    </p>
+                </div>
             </section>
         </main>
     </div>
@@ -254,19 +311,20 @@
                 const DEFAULT_SIGN_SIZE_KEY = "594x210";
                 const DEFAULT_PNG_SCALE = 4;
 
-                const BORDER_TO_HEIGHT_RATIO = 15 / 210;
-                const MAIN_FONT_TO_HEIGHT_RATIO = 48 / 210;
-                const MIN_MAIN_FONT_TO_HEIGHT_RATIO = 0.11;
-                const SUB_FONT_TO_HEIGHT_RATIO = 22 / 210;
+                const BASE_SIGN_HEIGHT_MILLIMETERS = 105;
+                const BASE_MAX_FONT_SIZE_MILLIMETERS = 32;
 
-                const MAIN_TEXT_WIDTH_FACTOR = 0.78;
-                const APPROXIMATE_CHARACTER_WIDTH_FACTOR = 0.62;
-                const MULTILINE_MAIN_TEXT_FACTOR = 0.82;
+                const BORDER_TO_HEIGHT_RATIO = 7.5 / 105;
+                const TEXT_SAFE_HORIZONTAL_PADDING_TO_HEIGHT_RATIO = 10 / 105;
+                const TEXT_SAFE_VERTICAL_PADDING_TO_HEIGHT_RATIO = 8 / 105;
+
+                const MIN_MAIN_FONT_TO_HEIGHT_RATIO = 0.11;
+                const SECONDARY_FONT_TO_MAIN_FONT_RATIO = 0.62;
 
                 const MAIN_LINE_HEIGHT_FACTOR = 1.12;
-                const SUB_LINE_HEIGHT_FACTOR = 1.18;
+                const SECONDARY_LINE_HEIGHT_FACTOR = 1.18;
                 const MAIN_TEXT_BASELINE_FACTOR = 0.85;
-                const MAIN_TO_SUB_SPACING_FACTOR = 0.08;
+                const MAIN_TO_SECONDARY_SPACING_FACTOR = 0.08;
 
                 const signText = ref(DEFAULT_SIGN_TEXT);
                 const secondarySignText = ref("");
@@ -295,6 +353,10 @@
                     () => signSizes[selectedSignSizeKey.value],
                 );
 
+                const selectedSignSizeLabel = computed(
+                    () => selectedSignSize.value.label,
+                );
+
                 const signAspectRatio = computed(
                     () =>
                         selectedSignSize.value.widthMillimeters /
@@ -303,13 +365,59 @@
 
                 const signPreviewStyle = computed(() => ({
                     aspectRatio: String(signAspectRatio.value),
-                    width: `min(100%, calc((100vh - 48px) * ${signAspectRatio.value}))`,
+                    width: `min(100%, calc((100vh - 120px) * ${signAspectRatio.value}))`,
                 }));
 
                 const signBorderWidth = computed(
                     () =>
                         selectedSignSize.value.heightMillimeters * BORDER_TO_HEIGHT_RATIO,
                 );
+
+                const textSafeHorizontalPadding = computed(
+                    () =>
+                        selectedSignSize.value.heightMillimeters *
+                        TEXT_SAFE_HORIZONTAL_PADDING_TO_HEIGHT_RATIO,
+                );
+
+                const textSafeVerticalPadding = computed(
+                    () =>
+                        selectedSignSize.value.heightMillimeters *
+                        TEXT_SAFE_VERTICAL_PADDING_TO_HEIGHT_RATIO,
+                );
+
+                const availableTextWidth = computed(() => {
+                    const { widthMillimeters } = selectedSignSize.value;
+
+                    return (
+                        widthMillimeters -
+                        signBorderWidth.value * 2 -
+                        textSafeHorizontalPadding.value * 2
+                    );
+                });
+
+                const availableTextHeight = computed(() => {
+                    const { heightMillimeters } = selectedSignSize.value;
+
+                    return (
+                        heightMillimeters -
+                        signBorderWidth.value * 2 -
+                        textSafeVerticalPadding.value * 2
+                    );
+                });
+
+                const maximumMainFontSize = computed(() => {
+                    return (
+                        selectedSignSize.value.heightMillimeters *
+                        (BASE_MAX_FONT_SIZE_MILLIMETERS / BASE_SIGN_HEIGHT_MILLIMETERS)
+                    );
+                });
+
+                const minimumMainFontSize = computed(() => {
+                    return (
+                        selectedSignSize.value.heightMillimeters *
+                        MIN_MAIN_FONT_TO_HEIGHT_RATIO
+                    );
+                });
 
                 const mainTextLines = computed(() =>
                     splitTextIntoTrimmedLines(signText.value.toUpperCase()),
@@ -330,60 +438,55 @@
                 });
 
                 const filenameSizePart = computed(() => {
-                    const { widthMillimeters, heightMillimeters } = selectedSignSize.value;
+                    const { widthMillimeters, heightMillimeters } =
+                        selectedSignSize.value;
+
                     return `${widthMillimeters}x${heightMillimeters}mm`;
                 });
 
                 const filenameBase = computed(
-                    () => `feuerwehrschild-${filenameTextPart.value}-${filenameSizePart.value}`,
+                    () =>
+                        `feuerwehrschild-${filenameTextPart.value}-${filenameSizePart.value}`,
                 );
 
                 const pngFilename = computed(() => `${filenameBase.value}.png`);
-
                 const svgFilename = computed(() => `${filenameBase.value}.svg`);
 
                 const mainFontSize = computed(() => {
-                    const { widthMillimeters, heightMillimeters } =
-                        selectedSignSize.value;
+                    const candidateMainFontSize = maximumMainFontSize.value;
+                    const candidateSecondaryFontSize =
+                        candidateMainFontSize * SECONDARY_FONT_TO_MAIN_FONT_RATIO;
 
-                    const baseFontSize =
-                        heightMillimeters * MAIN_FONT_TO_HEIGHT_RATIO;
+                    const widthScale = calculateTextWidthScale({
+                        mainLines: mainTextLines.value,
+                        secondaryLines: secondaryTextLines.value,
+                        mainFontSize: candidateMainFontSize,
+                        secondaryFontSize: candidateSecondaryFontSize,
+                        availableWidth: availableTextWidth.value,
+                    });
 
-                    const longestLineLength = Math.max(
-                        ...mainTextLines.value.map((line) => line.length),
-                        1,
-                    );
-
-                    const availableTextWidth =
-                        widthMillimeters * MAIN_TEXT_WIDTH_FACTOR;
-
-                    const estimatedTextWidth =
-                        longestLineLength *
-                        baseFontSize *
-                        APPROXIMATE_CHARACTER_WIDTH_FACTOR;
-
-                    const widthScalingFactor = Math.min(
-                        1,
-                        availableTextWidth / estimatedTextWidth,
-                    );
-
-                    const multilineScalingFactor =
-                        mainTextLines.value.length > 1 ? MULTILINE_MAIN_TEXT_FACTOR : 1;
+                    const heightScale = calculateTextHeightScale({
+                        mainLineCount: mainTextLines.value.length,
+                        secondaryLineCount: secondaryTextLines.value.length,
+                        mainFontSize: candidateMainFontSize,
+                        secondaryFontSize: candidateSecondaryFontSize,
+                        availableHeight: availableTextHeight.value,
+                        signHeight: selectedSignSize.value.heightMillimeters,
+                    });
 
                     const calculatedFontSize =
-                        baseFontSize * widthScalingFactor * multilineScalingFactor;
+                        candidateMainFontSize * Math.min(widthScale, heightScale, 1);
 
-                    const minimumFontSize =
-                        heightMillimeters * MIN_MAIN_FONT_TO_HEIGHT_RATIO;
-
-                    return Math.max(minimumFontSize, calculatedFontSize);
+                    return Math.max(minimumMainFontSize.value, calculatedFontSize);
                 });
 
-                const secondaryFontSize = computed(
-                    () =>
-                        selectedSignSize.value.heightMillimeters *
-                        SUB_FONT_TO_HEIGHT_RATIO,
+                const formattedMainFontSize = computed(() =>
+                    mainFontSize.value.toFixed(1),
                 );
+
+                const secondaryFontSize = computed(() => {
+                    return mainFontSize.value * SECONDARY_FONT_TO_MAIN_FONT_RATIO;
+                });
 
                 const svgMarkup = computed(() => {
                     const { widthMillimeters, heightMillimeters } =
@@ -400,11 +503,11 @@
                         mainFontSize.value * MAIN_LINE_HEIGHT_FACTOR;
 
                     const secondaryLineHeight =
-                        secondaryFontSize.value * SUB_LINE_HEIGHT_FACTOR;
+                        secondaryFontSize.value * SECONDARY_LINE_HEIGHT_FACTOR;
 
                     const spacingBetweenMainAndSecondaryText =
                         secondaryTextLines.value.length > 0
-                            ? heightMillimeters * MAIN_TO_SUB_SPACING_FACTOR
+                            ? heightMillimeters * MAIN_TO_SECONDARY_SPACING_FACTOR
                             : 0;
 
                     const totalTextBlockHeight =
@@ -527,6 +630,92 @@
                         .replace(/[^a-zA-Z0-9]+/g, "-")
                         .replace(/^-+|-+$/g, "")
                         .toLowerCase();
+                }
+
+                function calculateTextWidthScale({
+                    mainLines,
+                    secondaryLines,
+                    mainFontSize,
+                    secondaryFontSize,
+                    availableWidth,
+                }) {
+                    const measuredMainLineWidths = mainLines.map((line) =>
+                        measureTextWidthInMillimeters({
+                            text: line,
+                            fontSize: mainFontSize,
+                            fontWeight: 700,
+                            letterSpacing: mainFontSize * 0.025,
+                        }),
+                    );
+
+                    const measuredSecondaryLineWidths = secondaryLines.map((line) =>
+                        measureTextWidthInMillimeters({
+                            text: line,
+                            fontSize: secondaryFontSize,
+                            fontWeight: 600,
+                            letterSpacing: secondaryFontSize * 0.015,
+                        }),
+                    );
+
+                    const widestLineWidth = Math.max(
+                        ...measuredMainLineWidths,
+                        ...measuredSecondaryLineWidths,
+                        1,
+                    );
+
+                    return availableWidth / widestLineWidth;
+                }
+
+                function calculateTextHeightScale({
+                    mainLineCount,
+                    secondaryLineCount,
+                    mainFontSize,
+                    secondaryFontSize,
+                    availableHeight,
+                    signHeight,
+                }) {
+                    const mainLineHeight = mainFontSize * MAIN_LINE_HEIGHT_FACTOR;
+                    const secondaryLineHeight =
+                        secondaryFontSize * SECONDARY_LINE_HEIGHT_FACTOR;
+
+                    const spacingBetweenMainAndSecondaryText =
+                        secondaryLineCount > 0
+                            ? signHeight * MAIN_TO_SECONDARY_SPACING_FACTOR
+                            : 0;
+
+                    const textBlockHeight =
+                        mainLineCount * mainLineHeight +
+                        spacingBetweenMainAndSecondaryText +
+                        secondaryLineCount * secondaryLineHeight;
+
+                    return availableHeight / Math.max(textBlockHeight, 1);
+                }
+
+                function measureTextWidthInMillimeters({
+                    text,
+                    fontSize,
+                    fontWeight,
+                    letterSpacing,
+                }) {
+                    const canvasElement =
+                        measureTextWidthInMillimeters.canvasElement ||
+                        document.createElement("canvas");
+
+                    measureTextWidthInMillimeters.canvasElement = canvasElement;
+
+                    const canvasContext = canvasElement.getContext("2d");
+
+                    if (!canvasContext) {
+                        return text.length * fontSize * 0.62;
+                    }
+
+                    canvasContext.font = `${fontWeight} ${fontSize}px Arial, Helvetica, sans-serif`;
+
+                    const measuredTextWidth = canvasContext.measureText(text).width;
+                    const measuredLetterSpacing =
+                        Math.max(text.length - 1, 0) * letterSpacing;
+
+                    return measuredTextWidth + measuredLetterSpacing;
                 }
 
                 async function savePngFile() {
@@ -698,7 +887,9 @@
                     selectedSignSizeKey,
                     pngScaleFactor,
                     signSizes,
+                    selectedSignSizeLabel,
                     signPreviewStyle,
+                    formattedMainFontSize,
                     svgMarkup,
                     pngFilename,
                     savePngFile,
